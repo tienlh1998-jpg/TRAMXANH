@@ -1,0 +1,4 @@
+'use client';
+import {useState} from 'react';
+import {Eye,EyeOff} from 'lucide-react';
+export function PasswordInput({id='password',name='password',autoComplete='current-password',minLength,value,onChange}:{value?:string;onChange?:(value:string)=>void;id?:string;name?:string;autoComplete?:string;minLength?:number}){const [show,setShow]=useState(false);return <div className="password-field"><input value={value} onChange={onChange?e=>onChange(e.target.value):undefined} id={id} name={name} type={show?'text':'password'} autoComplete={autoComplete} required minLength={minLength} maxLength={128} placeholder="Nhập mật khẩu"/><button type="button" aria-label={show?'Ẩn mật khẩu':'Hiện mật khẩu'} aria-pressed={show} onClick={()=>setShow(!show)}>{show?<EyeOff size={20}/>:<Eye size={20}/>}</button></div>;}

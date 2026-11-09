@@ -1,0 +1,16 @@
+'use client';
+import Image from 'next/image';
+import Link from 'next/link';
+import { useRef, useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
+import { redeemReward } from '@/app/reward-actions';
+import { ConfirmDialog } from './confirm-dialog';
+export type Reward = { id:string;name:string;description:string|null;image_url:string|null;points_cost:number;stock:number };
+function safeImage(value:string|null){if(value?.startsWith('/')&&!value.startsWith('//'))return value;try{if(value&&new URL(value).protocol==='https:')return value;}catch{}return '/rewards/gift.svg';}
+export function RewardCatalog({rewards,balance}:{rewards:Reward[];balance:number}){
+ const [selected,setSelected]=useState<Reward|null>(null);const [error,setError]=useState('');const [receipt,setReceipt]=useState<{code:string;points:number;status:string}|null>(null);
+ const [pending,start]=useTransition();const requests=useRef(new Map<string,string>());const router=useRouter();
+ function choose(reward:Reward){if(!requests.current.has(reward.id))requests.current.set(reward.id,crypto.randomUUID());setSelected(reward);setError('');setReceipt(null);}
+ function save(){if(!selected)return;start(async()=>{try{const result=await redeemReward(requests.current.get(selected.id)!,selected.id);setError(result.error);if(result.receipt){requests.current.delete(selected.id);setReceipt(result.receipt);setSelected(null);router.refresh();}}catch{setError('Kết nối bị gián đoạn. Thử xác nhận lại để kiểm tra cùng yêu cầu.');}});}
+ return <><section className="wallet-summary"><span>Điểm hiện có</span><strong>{balance.toLocaleString('vi-VN')} EcoPoints</strong><Link href="/hoc-sinh/phieu-qua">Xem phiếu nhận quà →</Link></section>{receipt&&<div className="message success" role="status"><strong>{receipt.status==='PENDING'?'Đổi quà thành công — Chờ nhận':'Yêu cầu này đã được ghi nhận'}</strong><p>Đã dùng {receipt.points} điểm. Xem trạng thái tại phiếu nhận quà.</p><p className="claim-code">Mã: {receipt.code}</p><Link href="/hoc-sinh/phieu-qua">Mở phiếu nhận quà</Link></div>}<div className="reward-grid">{rewards.map(reward=><article className="card reward-card" key={reward.id}><Image src={safeImage(reward.image_url)} width={320} height={200} alt={reward.name} unoptimized/><h3>{reward.name}</h3><p className="muted">{reward.description}</p><p>Còn {reward.stock} phần</p><strong className="green">{reward.points_cost.toLocaleString('vi-VN')} EcoPoints</strong><button className="button" onClick={()=>choose(reward)} disabled={pending||reward.stock<1||balance<reward.points_cost}>{reward.stock<1?'Hết quà':balance<reward.points_cost?'Chưa đủ điểm':'Đổi quà'}</button>{balance<reward.points_cost&&reward.stock>0&&<p className="muted">Cần thêm {reward.points_cost-balance} điểm.</p>}</article>)}</div><ConfirmDialog open={Boolean(selected)} title="Xác nhận đổi quà" pending={pending} onCancel={()=>setSelected(null)} onConfirm={save}><p>{selected?.name}</p><p>Sử dụng <strong>{selected?.points_cost} EcoPoints</strong>.</p><p className="muted">Điểm và tồn kho sẽ được kiểm tra lại. Quà nhận trực tiếp từ người phụ trách chương trình.</p>{error&&<p className="message error" role="alert">{error}</p>}</ConfirmDialog></>;
+}

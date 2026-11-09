@@ -1,0 +1,36 @@
+import Link from 'next/link';
+import {createClient} from '@/lib/supabase/server';
+import {EmptyState} from './ecopoint';
+import {RewardCatalog,type Reward} from './reward-catalog';
+import {RedemptionControl} from './redemption-control';
+import {supabaseConfig} from '@/lib/supabase/config';
+
+export async function RewardsPage(){
+ const client=await createClient();const [wallet,rewards]=await Promise.all([client.rpc('student_dashboard'),client.from('rewards').select('id,name,description,image_url,points_cost,stock').eq('active',true).order('points_cost')]);
+ if(wallet.error||rewards.error)return <EmptyState title="Chưa thể tải phần thưởng" description="Vui lòng kiểm tra kết nối và thử lại."/>;
+ return <><h2>Đổi quà xanh</h2>{rewards.data?.length?<RewardCatalog rewards={rewards.data as Reward[]} balance={Number(wallet.data.balance)}/>:<><EmptyState title="Chưa có phần thưởng" description="Người phụ trách sẽ cập nhật quà khi chương trình sẵn sàng."/><Link className="button" href="/hoc-sinh/phieu-qua">Phiếu đã đổi</Link></>}</>;
+}
+const statusLabel:Record<string,string>={PENDING:'Chờ nhận',COLLECTED:'Đã nhận',CANCELLED:'Đã hủy / hoàn điểm'};
+type Receipt={id:string;reward_name:string;points_cost:number;claim_code:string;status:string;created_at:string;profiles:{full_name:string;student_code:string|null}|null};
+export async function RedemptionsPage({admin=false,page=1,status='PENDING'}:{admin?:boolean;page?:number;status?:string}){
+ const client=await createClient();const current=Math.max(1,Math.min(10000,Number.isFinite(page)?Math.floor(page):1));
+ let query=client.from('reward_redemptions').select('id,reward_name,points_cost,claim_code,status,created_at,profiles!reward_redemptions_student_id_fkey(full_name,student_code)',{count:'exact'}).order('created_at',{ascending:false}).range((current-1)*20,current*20-1);
+ const selected=status in statusLabel?status:'PENDING';if(admin)query=query.eq('status',selected);
+ const {data,error,count}=await query;const rows=(data??[]) as unknown as Receipt[];
+ const path=admin?'/quan-tri/phieu-qua':'/hoc-sinh/phieu-qua';const href=(p:number)=>`${path}?${new URLSearchParams({page:String(p),...(admin?{status:selected}:{})})}`;
+ return <section><h2>{admin?'Xử lý phiếu nhận quà':'Phiếu nhận quà của tôi'}</h2>{admin&&<nav className="period-tabs" aria-label="Trạng thái phiếu">{Object.entries(statusLabel).map(([value,label])=><Link key={value} href={`${path}?status=${value}`} aria-current={selected===value?'page':undefined}>{label}</Link>)}</nav>}{error?<p className="message error">Chưa thể tải phiếu. Vui lòng thử lại.</p>:rows.length?rows.map(row=><article className="card history-row" key={row.id}><strong>{row.reward_name||'Phần thưởng'}</strong><span className={`status-badge ${row.status.toLowerCase()}`}>{statusLabel[row.status]}</span><p>{row.points_cost} điểm · {new Date(row.created_at).toLocaleString('vi-VN',{timeZone:'Asia/Ho_Chi_Minh'})}</p>{admin&&<p>{row.profiles?.full_name} · {row.profiles?.student_code}</p>}<p className="claim-code">Mã nhận: {row.claim_code}</p>{row.status==='PENDING'&&<p className="muted">Đưa mã này cho người phụ trách khi nhận quà.</p>}{admin&&row.status==='PENDING'&&<RedemptionControl id={row.id} name={row.reward_name}/>}</article>):<EmptyState title="Chưa có phiếu" description={admin?'Không có phiếu ở trạng thái này.':'Quà bạn đổi thành công sẽ được lưu tại đây.'}/>}<div className="two-actions">{current>1&&<Link href={href(current-1)}>Trang trước</Link>}{(count??0)>current*20&&<Link href={href(current+1)}>Trang sau</Link>}</div></section>;
+}
+type Rank={id:string;name:string;school_year:string;points:number;kg:number;rank:number;contributions:number};
+export async function RankingsPage({period='TOTAL',classId}:{period?:string;classId?:string}){
+ const selected=['WEEK','MONTH','TOTAL'].includes(period)?period:'TOTAL';const client=await createClient();const {data,error}=await client.rpc('class_ranking',{p_period:selected});
+ const rows=(data??[]) as Rank[];
+ return <section><h2>Bảng xếp hạng lớp</h2><nav className="period-tabs" aria-label="Thời gian xếp hạng">{[['WEEK','Tuần này'],['MONTH','Tháng này'],['TOTAL','Tổng cộng']].map(([value,label])=><Link key={value} href={`?period=${value}`} aria-current={value===selected?'page':undefined}>{label}</Link>)}</nav>{!classId&&<p className="message">Bạn chưa được gán lớp nên chưa có thứ hạng lớp riêng. Bạn vẫn có thể gửi đóng góp và đổi quà bình thường.</p>}<p className="muted">Tính theo điểm đóng góp hợp lệ, không giảm khi đổi quà. Tuần bắt đầu thứ Hai, theo giờ Việt Nam. Các lớp bằng điểm cùng hạng.</p>{error?<p className="message error">Chưa thể tải bảng xếp hạng. Vui lòng thử lại.</p>:rows.length?rows.map(row=><article className={`ranking-row ${row.id===classId?'my-class':''}`} key={row.id}><span className="rank-number">#{row.rank}</span><div><strong>{row.name}{row.id===classId?' · Lớp bạn':''}</strong><small>{row.school_year} · {Number(row.kg).toLocaleString('vi-VN')} kg · {row.contributions} lượt</small></div><strong>{Number(row.points).toLocaleString('vi-VN')}<small>điểm</small></strong></article>):<EmptyState title="Chưa có lớp tham gia" description="Bảng xếp hạng cập nhật khi lớp được tạo và có đóng góp."/>}</section>;
+}
+type Impact={students:number;kilograms:number;contributions:number;rewards:number;materials:{name:string;kg:number;unit:string}[];weeks:{label:string;week:string;kg:number}[]};
+export async function ImpactPage({publicView=false}:{publicView?:boolean}){
+ if(!supabaseConfig())return <EmptyState title="Chương trình đang chuẩn bị" description="Thành quả sẽ được công bố khi dữ liệu được kết nối."/>;
+ const client=await createClient();const {data,error}=await client.rpc('green_impact');
+ if(error)return <EmptyState title={publicView?'Chương trình đang chuẩn bị':'Chưa thể tải thành quả'} description="Số liệu sẽ hiển thị khi dữ liệu được kết nối."/>;
+ const stats=data as Impact;const max=Math.max(1,...stats.weeks.map(w=>Number(w.kg)));
+ return <section><h2>Thành quả xanh</h2><div className="impact-grid">{[[stats.students,'Học sinh đã đóng góp'],[stats.kilograms,'Kg đã tiếp nhận (vật liệu kg)'],[stats.contributions,'Lượt đóng góp'],[stats.rewards,'Quà đã nhận']].map(([value,label])=><article className="material-card" key={String(label)}><strong>{Number(value).toLocaleString('vi-VN')}</strong><small>{label}</small></article>)}</div><section className="card impact-chart"><h3>Thu gom trong 8 tuần</h3><p className="muted">Chỉ tính vật liệu theo kg; chai, thùng và đơn vị khác nằm ở bảng vật liệu bên dưới. Tuần bắt đầu thứ Hai.</p><div className="weekly-bars" role="img" aria-label={stats.weeks.map(w=>`Tuần ${w.label}: ${w.kg} kg`).join('; ')}>{stats.weeks.map(w=><div className="week-column" key={w.week}><span>{Number(w.kg).toLocaleString('vi-VN')}</span><div className="week-track"><div style={{height:`${Number(w.kg)/max*100}%`}}/></div><small>{w.label}</small></div>)}</div></section><section className="card"><h3>Theo vật liệu</h3>{stats.materials.map(m=><p className="material-total" key={`${m.name}-${m.unit}`}><span>{m.name}</span><strong>{Number(m.kg).toLocaleString('vi-VN')} {m.unit}</strong></p>)}</section><p className="muted">Chỉ tính đóng góp hợp lệ. Quà đã nhận được tính khi người phụ trách xác nhận giao. Không quy đổi thành cây xanh hay CO₂.</p></section>;
+}

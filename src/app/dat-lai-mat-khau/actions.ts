@@ -1,0 +1,4 @@
+'use server';
+import {createClient} from '@/lib/supabase/server';
+import {redirect} from 'next/navigation';
+export async function updatePassword(_previous:{error:string;success:string},form:FormData){const password=String(form.get('password')??'');if(password.length<8||password.length>128||password!==form.get('confirm_password'))return {error:'Hai mật khẩu phải giống nhau và có ít nhất 8 ký tự.',success:''};const client=await createClient();const {data:{user},error}=await client.auth.getUser();if(error||!user)return {error:'Liên kết không hợp lệ hoặc đã hết hạn. Hãy yêu cầu email mới.',success:''};const result=await client.auth.updateUser({password});if(result.error)return {error:'Chưa đổi được mật khẩu. Thử mật khẩu khác hoặc yêu cầu liên kết mới.',success:''};await client.auth.signOut();redirect('/dang-nhap?status=password-reset');}

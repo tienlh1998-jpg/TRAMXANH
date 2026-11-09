@@ -1,0 +1,4 @@
+'use server';
+import {createClient} from '@/lib/supabase/server';
+import {supabaseConfig} from '@/lib/supabase/config';
+export async function requestReset(_previous:{error:string;success:string},form:FormData){if(!supabaseConfig())return {error:'Hệ thống chưa kết nối.',success:''};const email=String(form.get('email')??'').trim();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>254)return {error:'Nhập email hợp lệ.',success:''};const client=await createClient();const {error}=await client.auth.resetPasswordForEmail(email,{redirectTo:'https://ecopoint-pi.vercel.app/auth/callback?flow=recovery'});return error?{error:'Chưa gửi được email. Chờ vài phút rồi thử lại.',success:''}:{error:'',success:'Nếu email có tài khoản, bạn sẽ nhận được liên kết đặt lại mật khẩu. Kiểm tra cả thư rác và mở liên kết trên cùng trình duyệt này.'};}

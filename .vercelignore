@@ -1,0 +1,9 @@
+node_modules
+.next
+.git
+.env*
+test-results
+playwright-report
+stitch_green_station_ecorewards_pwa
+*.zip
+tests
